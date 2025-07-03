@@ -2,6 +2,6 @@ Flask==3.1.0
 cryptography==44.0.2
 psutil==5.9.8
 mysql-connector-python==9.2.0
-kyber-py==1.1.1
-dilithium-py==1.0.2
+kyber-py==1.0.2
+git+https://github.com/username/dilithium-py.git
 gunicorn==21.2.0
