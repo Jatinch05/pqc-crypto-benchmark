@@ -7,10 +7,10 @@ This project compares **traditional cryptography (AES-GCM + HMAC)** with **post-
 ## 🚀 Features
 
 - 🔐 Encrypts patient data using:
-  - **Traditional:** AES-GCM with HMAC
+  - **Traditional:** AES-GCM
   - **PQC:** ML-KEM (Kyber512) + AES-CTR + ML-DSA (Dilithium44)
 - ✅ Verifies data integrity using:
-  - **Traditional:** HMAC
+  - **Traditional:** AES-GCM
   - **PQC:** Digital signature with Dilithium
 - 📊 Benchmarks:
   - Time taken
