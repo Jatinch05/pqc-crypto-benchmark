@@ -32,9 +32,9 @@ This project compares **traditional cryptography (AES-GCM + HMAC)** with **post-
 
 ---
 
-## 🛠️ Setup Instructions
+# 🛠️ Setup Instructions
 
-### 1. Clone the repository
+## 1. Clone the repository
 
 ```bash
 git clone https://github.com/your-username/pqc-crypto-benchmark.git
@@ -43,24 +43,24 @@ cd pqc-crypto-benchmark
 python3.10 -m venv venv
 source venv/bin/activate
 ```
-### 2. Create & activate a Python virtual environment
-# Windows (PowerShell)
+## 2. Create & activate a Python virtual environment
+### Windows (PowerShell)
 ```bash
 python3.10 -m venv venv
 .\venv\Scripts\Activate.ps1
 ```
-# Linux / macOS
+### Linux / macOS
 ```bash
 python3.10 -m venv venv
 source venv/bin/activate
 ```
-### 3. Install Dependencies
+## 3. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
-### 4. Configure MySQL
-# Start your MySQL server.
-# Log in and run:
+## 4. Configure MySQL
+### Start your MySQL server.
+### Log in and run:
 ```bash
 CREATE DATABASE pqc_demo;
 USE pqc_demo;
@@ -79,7 +79,7 @@ CREATE TABLE patient_data (
 );
 
 ```
-# Open database.py and update the DB_CONFIG dictionary:
+### Open database.py and update the DB_CONFIG dictionary:
 ```bash
 DB_CONFIG = {
     "host": "localhost",
@@ -89,5 +89,5 @@ DB_CONFIG = {
 }
 
 ```
-### 5. Run the app
-# python app.py
+## 5. Run the app
+### python app.py
