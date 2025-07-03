@@ -1,12 +1,13 @@
+import os
 import mysql.connector
 
 class Database:
     def __init__(self):
         self.conn = mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="Jatinch@2005",
-            database="benchmark"
+            host=os.getenv("DB_HOST", "localhost"),
+            user=os.getenv("DB_USER", "root"),
+            password=os.getenv("DB_PASSWORD", ""),
+            database=os.getenv("DB_NAME", "benchmark")
         )
         self.cursor = self.conn.cursor()
 
