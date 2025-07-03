@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Patient Data Encryption</title>
+    <style>
+        .hidden { display: none; }
+        table { border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .comparison-table { display: flex; justify-content: space-between; }
+        .comparison-table table { width: 45%; }
+        .single-table { width: 50%; }
+        .note { color: #555; font-size: 0.9em; margin-top: 10px; }
+    </style>
+    <script>
+        function toggleKeyFields() {
+            var method = document.getElementById('decrypt_method').value;
+            var traditionalKey = document.getElementById('traditional_key_div');
+            var pqcKeys = document.getElementById('pqc_keys_div');
+            traditionalKey.classList.add('hidden');
+            pqcKeys.classList.add('hidden');
+            if (method === 'traditional') {
+                traditionalKey.classList.remove('hidden');
+            } else if (method === 'pqc') {
+                pqcKeys.classList.remove('hidden');
+            }
+        }
+    </script>
+</head>
+<body>
+    <h1>Encrypt Patient Data</h1>
+    <form action="/" method="post">
+        <input type="hidden" name="action" value="encrypt">
+        <label for="name">Name:</label><br>
+        <input type="text" name="name" id="name" required><br>
+        <label for="age">Age:</label><br>
+        <input type="number" name="age" id="age" required><br>
+        <label for="condition">Condition:</label><br>
+        <input type="text" name="condition" id="condition" required><br>
+        <input type="submit" value="Encrypt with Both Methods">
+    </form>
+
+    <h1>Decrypt Patient Data</h1>
+    <form action="/" method="post">
+        <input type="hidden" name="action" value="decrypt">
+        <label for="id">Patient ID:</label><br>
+        <input type="number" name="id" id="id" required><br>
+        <label for="decrypt_method">Method:</label><br>
+        <select name="decrypt_method" id="decrypt_method" onchange="toggleKeyFields()">
+            <option value="traditional">Traditional (AES-GCM)</option>
+            <option value="pqc">PQC (Kyber + AES-CTR + Dilithium)</option>
+        </select><br>
+        <div id="traditional_key_div">
+            <label for="traditional_key">AES Key:</label><br>
+            <textarea name="traditional_key" id="traditional_key" rows="2" cols="50"></textarea><br>
+        </div>
+        <div id="pqc_keys_div" class="hidden">
+            <label for="kyber_sk">Kyber Secret Key:</label><br>
+            <textarea name="kyber_sk" id="kyber_sk" rows="2" cols="50"></textarea><br>
+            <label for="dilithium_pk">Dilithium Public Key:</label><br>
+            <textarea name="dilithium_pk" id="dilithium_pk" rows="2" cols="50"></textarea><br>
+        </div>
+        <input type="submit" value="Decrypt">
+    </form>
+
+    <h1>Reset Database</h1>
+    <form action="/" method="post">
+        <input type="hidden" name="action" value="reset">
+        <input type="submit" value="Reset Table">
+    </form>
+
+    {% if result %}
+    <h2>Result</h2>
+    <p>{{ result | safe }}</p>
+    {% endif %}
+
+    {% if benchmark_data.traditional or benchmark_data.pqc %}
+    <h2>Performance {% if action_type == 'decrypt' %}Results{% else %}Comparison{% endif %}</h2>
+    {% if action_type == 'encrypt' %}
+    <div class="comparison-table">
+        <table>
+            <tr>
+                <th>Metric</th>
+                <th>Traditional (AES-GCM)</th>
+            </tr>
+            {% if benchmark_data.traditional %}
+            <tr>
+                <td>Total Time Taken</td>
+                <td>{{ benchmark_data.traditional.time_taken }}</td>
+            </tr>
+            <tr>
+                <td>CPU Usage</td>
+                <td>{{ benchmark_data.traditional.cpu_usage }}</td>
+            </tr>
+            <tr>
+                <td>Memory Usage</td>
+                <td>{{ benchmark_data.traditional.memory_diff }}</td>
+            </tr>
+            {% if crypto_timings.traditional %}
+            <tr>
+                <td>AES-GCM Time</td>
+                <td>{{ "%.2f ms" % crypto_timings.traditional.aes_gcm }}</td>
+            </tr>
+            {% endif %}
+            {% endif %}
+        </table>
+        <table>
+            <tr>
+                <th>Metric</th>
+                <th>PQC (Kyber + AES-CTR + Dilithium)</th>
+            </tr>
+            {% if benchmark_data.pqc %}
+            <tr>
+                <td>Total Time Taken</td>
+                <td>{{ benchmark_data.pqc.time_taken }}</td>
+            </tr>
+            <tr>
+                <td>CPU Usage</td>
+                <td>{{ benchmark_data.pqc.cpu_usage }}</td>
+            </tr>
+            <tr>
+                <td>Memory Usage</td>
+                <td>{{ benchmark_data.pqc.memory_diff }}</td>
+            </tr>
+            {% if crypto_timings.pqc %}
+            <tr>
+                <td>Kyber Encapsulation Time</td>
+                <td>{{ "%.2f ms" % crypto_timings.pqc.kyber }}</td>
+            </tr>
+            <tr>
+                <td>AES-CTR Time</td>
+                <td>{{ "%.2f ms" % crypto_timings.pqc.aes_ctr }}</td>
+            </tr>
+            <tr>
+                <td>Dilithium Signing Time</td>
+                <td>{{ "%.2f ms" % crypto_timings.pqc.dilithium }}</td>
+            </tr>
+            {% endif %}
+            {% endif %}
+        </table>
+    </div>
+    {% elif action_type == 'decrypt' %}
+    <div class="single-table">
+        {% if benchmark_data.traditional %}
+        <table>
+            <tr>
+                <th>Metric</th>
+                <th>Traditional (AES-GCM)</th>
+            </tr>
+            <tr>
+                <td>Total Time Taken</td>
+                <td>{{ benchmark_data.traditional.time_taken }}</td>
+            </tr>
+            <tr>
+                <td>CPU Usage</td>
+                <td>{{ benchmark_data.traditional.cpu_usage }}</td>
+            </tr>
+            <tr>
+                <td>Memory Usage</td>
+                <td>{{ benchmark_data.traditional.memory_diff }}</td>
+            </tr>
+            {% if crypto_timings.traditional %}
+            <tr>
+                <td>AES-GCM Time</td>
+                <td>{{ "%.2f ms" % crypto_timings.traditional.aes_gcm }}</td>
+            </tr>
+            {% endif %}
+        </table>
+        {% elif benchmark_data.pqc %}
+        <table>
+            <tr>
+                <th>Metric</th>
+                <th>PQC (Kyber + AES-CTR + Dilithium)</th>
+            </tr>
+            <tr>
+                <td>Total Time Taken</td>
+                <td>{{ benchmark_data.pqc.time_taken }}</td>
+            </tr>
+            <tr>
+                <td>CPU Usage</td>
+                <td>{{ benchmark_data.pqc.cpu_usage }}</td>
+            </tr>
+            <tr>
+                <td>Memory Usage</td>
+                <td>{{ benchmark_data.pqc.memory_diff }}</td>
+            </tr>
+            {% if crypto_timings.pqc %}
+            <tr>
+                <td>Kyber Decapsulation Time</td>
+                <td>{{ "%.2f ms" % crypto_timings.pqc.kyber }}</td>
+            </tr>
+            <tr>
+                <td>AES-CTR Time</td>
+                <td>{{ "%.2f ms" % crypto_timings.pqc.aes_ctr }}</td>
+            </tr>
+            <tr>
+                <td>Dilithium Verification Time</td>
+                <td>{{ "%.2f ms" % crypto_timings.pqc.dilithium }}</td>
+            </tr>
+            {% endif %}
+        </table>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% endif %}
+</body>
+</html>
