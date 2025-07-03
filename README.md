@@ -90,4 +90,6 @@ DB_CONFIG = {
 
 ```
 ## 5. Run the app
-### python app.py
+```bash
+python app.py
+```
