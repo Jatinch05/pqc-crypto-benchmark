@@ -1,5 +1,8 @@
 import os
+from dotenv import load_dotenv
 import mysql.connector
+
+load_dotenv() 
 
 class Database:
     def __init__(self):
