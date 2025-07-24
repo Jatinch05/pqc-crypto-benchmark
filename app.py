@@ -1,100 +1,77 @@
 from flask import Flask, request, render_template
-from crypto import TraditionalCrypto, PQCCrypto
-from database import Database
+from crypto    import TraditionalCrypto, PQCCrypto
+from database  import Database
 from benchmark import Benchmark
 
 app = Flask(__name__)
+db  = Database()
+trad = TraditionalCrypto()
+pqc  = PQCCrypto()
 
-db = Database()
-traditional_crypto = TraditionalCrypto()
-pqc_crypto = PQCCrypto()
-
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/', methods=['GET','POST'])
 def index():
     result = None
     benchmark_data = {'traditional': None, 'pqc': None}
-    crypto_timings = {'traditional': None, 'pqc': None}
+    crypto_timings = {'traditional': None,'pqc': None}
     action_type = None
 
     if request.method == 'POST':
-        action = request.form.get('action')
+        action = request.form['action']
 
         if action == 'encrypt':
             action_type = 'encrypt'
-            name = request.form['name']
-            age = request.form['age']
-            condition = request.form['condition']
-            patient_details = f"Name: {name}, Age: {age}, Condition: {condition}"
+            pd = f"Name: {request.form['name']}, Age: {request.form['age']}, Condition: {request.form['condition']}"
 
             # Traditional Encryption
-            benchmark_traditional = Benchmark()
-            benchmark_traditional.start()
-            trad_ct, trad_tag, trad_iv, trad_key, trad_timings = traditional_crypto.encrypt(patient_details)
-            benchmark_data['traditional'] = benchmark_traditional.stop()
-            crypto_timings['traditional'] = trad_timings
-            trad_id = db.insert_patient('traditional', trad_ct, trad_tag, trad_iv)
+            b1 = Benchmark(); b1.start()
+            t_ct, _, t_iv, t_key, t_times, t_kem, t_sig = trad.encrypt(pd)
+            benchmark_data['traditional'] = b1.stop()
+            crypto_timings['traditional'] = t_times
+            trad_id = db.insert_patient('traditional', t_ct, t_sig, t_iv, kyber_ct=t_kem, sig=t_sig)
 
             # PQC Encryption
-            benchmark_pqc = Benchmark()
-            benchmark_pqc.start()
-            pqc_ct, _, pqc_nonce, pqc_kyber_ct, pqc_sig, pqc_sk_kyber, pqc_pk_dilithium, pqc_timings = pqc_crypto.encrypt(patient_details)
-            benchmark_data['pqc'] = benchmark_pqc.stop()
-            crypto_timings['pqc'] = pqc_timings
-            pqc_id = db.insert_patient('pqc', pqc_ct, None, pqc_nonce, kyber_ct=pqc_kyber_ct, sig=pqc_sig)
+            b2 = Benchmark(); b2.start()
+            p_ct, _, p_iv, p_kem, p_sig, p_sk, p_pk, p_times = pqc.encrypt(pd)
+            benchmark_data['pqc'] = b2.stop()
+            crypto_timings['pqc'] = p_times
+            pqc_id = db.insert_patient('pqc', p_ct, None, p_iv, kyber_ct=p_kem, sig=p_sig)
 
-            result = (f"Traditional Data stored with ID: {trad_id}<br>"
-                      f"Key: {trad_key.hex()}<br><br>"
-                      f"PQC Data stored with ID: {pqc_id}<br>"
-                      f"Kyber Secret Key: {pqc_sk_kyber.hex()}<br>"
-                      f"Dilithium Public Key: {pqc_pk_dilithium.hex()}")
+            result = (
+                f"Traditional ID: {trad_id}, AES Key: {t_key.hex()}<br>"
+                f"PQC ID: {pqc_id}, Kyber SK: {p_sk.hex()}, Dilithium PK: {p_pk.hex()}"
+            )
 
         elif action == 'decrypt':
             action_type = 'decrypt'
-            id_ = int(request.form['id'])
-            method = request.form['decrypt_method']
-            data = db.get_patient(id_)
-            if not data:
+            rec = db.get_patient(int(request.form['id']))
+            if not rec:
                 result = "Patient not found"
-                return render_template('index.html', result=result, benchmark_data=benchmark_data, crypto_timings=crypto_timings, action_type=action_type)
-
-            encrypted_data = data[2]
-            tag = data[3]
-            iv_or_nonce = data[4]  # IV for Traditional, nonce for PQC
-            kyber_ct = data[5]
-            sig = data[6]
-
-            benchmark = Benchmark()
-            benchmark.start()
-            if method == 'traditional':
-                key = bytes.fromhex(request.form['traditional_key'])
-                pt, timings = traditional_crypto.decrypt(encrypted_data, tag, iv_or_nonce, key)
-                benchmark_data['traditional'] = benchmark.stop()
-                crypto_timings['traditional'] = timings
-                benchmark_data['pqc'] = None
-                crypto_timings['pqc'] = None
-            elif method == 'pqc':
-                sk_kyber = bytes.fromhex(request.form['kyber_sk'])
-                pk_dilithium = bytes.fromhex(request.form['dilithium_pk'])
-                pt, timings = pqc_crypto.decrypt(encrypted_data, tag, iv_or_nonce, kyber_ct, sig, sk_kyber, pk_dilithium)
-                benchmark_data['pqc'] = benchmark.stop()
-                crypto_timings['pqc'] = timings
-                benchmark_data['traditional'] = None
-                crypto_timings['traditional'] = None
             else:
-                result = "Invalid method"
-                return render_template('index.html', result=result, benchmark_data=benchmark_data, crypto_timings=crypto_timings, action_type=action_type)
+                _, _, ct, tag, iv, kem_ct, sig = rec
+                b = Benchmark(); b.start()
+                if request.form['decrypt_method'] == 'traditional':
+                    pt, dt = trad.decrypt(ct, tag, iv, kem_ct)
+                    benchmark_data['traditional'] = b.stop()
+                    crypto_timings['traditional'] = dt
+                else:
+                    sk = bytes.fromhex(request.form['kyber_sk'])
+                    pk = bytes.fromhex(request.form['dilithium_pk'])
+                    pt, dt = pqc.decrypt(ct, tag, iv, kem_ct, sig, sk, pk)
+                    benchmark_data['pqc'] = b.stop()
+                    crypto_timings['pqc'] = dt
+                result = f"Decrypted: {pt}" if pt else "Decryption failed."
 
-            if pt is None:
-                result = "Decryption failed"
-            else:
-                result = f"Decrypted data: {pt}"
-
-        elif action == 'reset':
+        else:
             action_type = 'reset'
             db.reset_table()
-            result = "Table reset successfully. IDs will start from 1."
+            result = "Table reset successfully."
 
-    return render_template('index.html', result=result, benchmark_data=benchmark_data, crypto_timings=crypto_timings, action_type=action_type)
+    return render_template('index.html',
+        result=result,
+        benchmark_data=benchmark_data,
+        crypto_timings=crypto_timings,
+        action_type=action_type
+    )
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -4,3 +4,4 @@ psutil==5.9.8
 mysql-connector-python==9.2.0
 gunicorn==21.2.0
 python-dotenv
+pycryptodome==3.17.0

@@ -2,95 +2,134 @@ import os
 import time
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
+
 from kyber_py.ml_kem import ML_KEM_512
 from dilithium_py.ml_dsa import ML_DSA_44
 
+# PyCryptodome imports for RSA KEM & PSS
+from Crypto.PublicKey   import RSA
+from Crypto.Cipher      import PKCS1_OAEP, AES
+from Crypto.Signature   import pss
+from Crypto.Hash        import SHA256
+from Crypto.Random      import get_random_bytes
+
+
 class TraditionalCrypto:
     def __init__(self):
-        self.key = os.urandom(32)
+        # Server RSA keypair (2048-bit)
+        self._rsa_key = RSA.generate(2048)
+        self._rsa_pub = self._rsa_key.publickey()
 
     def encrypt(self, data: str) -> tuple:
-        start_time = time.perf_counter()
-        iv = os.urandom(16)
-        cipher = Cipher(algorithms.AES(self.key), modes.GCM(iv), backend=default_backend())
-        encryptor = cipher.encryptor()
-        ct = encryptor.update(data.encode()) + encryptor.finalize()
-        tag = encryptor.tag
-        aes_time = (time.perf_counter() - start_time) * 1000
-        print(f"Traditional AES-GCM Encryption Time: {aes_time:.2f} ms, Data Size: {len(data.encode())} bytes")
-        return ct, tag, iv, self.key, {'aes_gcm': aes_time}
+        # Phase 1 — RSA‑OAEP encapsulation
+        t0 = time.perf_counter()
+        aes_key = get_random_bytes(32)
+        kem_ct  = PKCS1_OAEP.new(self._rsa_pub).encrypt(aes_key)
+        t1 = time.perf_counter()
+
+        # Phase 2 — AES‑CTR encrypt
+        iv   = get_random_bytes(8)  # 8-byte nonce for PyCryptodome
+        aes  = AES.new(aes_key, AES.MODE_CTR, nonce=iv)
+        ct   = aes.encrypt(data.encode())
+        t2   = time.perf_counter()
+
+        # Phase 3 — RSA‑PSS signing
+        msg       = ct + kem_ct
+        h         = SHA256.new(msg)
+        signature = pss.new(self._rsa_key).sign(h)
+        t3        = time.perf_counter()
+
+        timings = {
+            'rsa_kem_ms':   (t1 - t0) * 1000,
+            'aes_ctr_ms':   (t2 - t1) * 1000,
+            'rsa_pss_ms':   (t3 - t2) * 1000,
+        }
+        print(f"Traditional Total Encryption Time: {sum(timings.values()):.2f} ms")
+
+        # returns: ct, placeholder tag, iv, display_key, per-phase timings, kem_ct, signature
+        return ct, None, iv, aes_key, timings, kem_ct, signature
 
     def decrypt(self, ct: bytes, tag: bytes, iv: bytes, key: bytes) -> tuple:
-        start_time = time.perf_counter()
-        cipher = Cipher(algorithms.AES(key), modes.GCM(iv, tag), backend=default_backend())
-        decryptor = cipher.decryptor()
+        # Here `tag` holds the signature, and `key` holds the KEM ciphertext
+        signature = tag
+        kem_ct    = key
+
+        # Phase 1 — verify RSA‑PSS
+        t0 = time.perf_counter()
+        h  = SHA256.new(ct + kem_ct)
         try:
-            pt_bytes = decryptor.update(ct) + decryptor.finalize()
-            aes_time = (time.perf_counter() - start_time) * 1000
-            print(f"Traditional AES-GCM Decryption Time: {aes_time:.2f} ms")
-            return pt_bytes.decode(), {'aes_gcm': aes_time}
-        except:
+            pss.new(self._rsa_pub).verify(h, signature)
+        except (ValueError, TypeError):
             return None, None
+        t1 = time.perf_counter()
+
+        # Phase 2 — RSA‑OAEP decapsulation
+        aes_key = PKCS1_OAEP.new(self._rsa_key).decrypt(kem_ct)
+        t2      = time.perf_counter()
+
+        # Phase 3 — AES‑CTR decrypt
+        aes     = AES.new(aes_key, AES.MODE_CTR, nonce=iv)
+        pt      = aes.decrypt(ct).decode()
+        t3      = time.perf_counter()
+
+        timings = {
+            'rsa_pss_ver_ms': (t1 - t0) * 1000,
+            'rsa_kem_dec_ms': (t2 - t1) * 1000,
+            'aes_ctr_dec_ms': (t3 - t2) * 1000,
+        }
+        print(f"Traditional Total Decryption Time: {sum(timings.values()):.2f} ms")
+
+        return pt, timings
+
 
 class PQCCrypto:
     def __init__(self):
-        self.pk_kyber, self.sk_kyber = ML_KEM_512.keygen()
-        self.pk_dilithium, self.sk_dilithium = ML_DSA_44.keygen()
+        self._kyber      = ML_KEM_512
+        self.pk_kyber, self.sk_kyber = self._kyber.keygen()
+        self._dilithium = ML_DSA_44
+        self.pk_dilithium, self.sk_dilithium = self._dilithium.keygen()
 
     def encrypt(self, data: str) -> tuple:
-        data_size = len(data.encode())
-        # Kyber encapsulation
-        start_time = time.perf_counter()
-        shared_key, kyber_ct = ML_KEM_512.encaps(self.pk_kyber)
-        kyber_time = (time.perf_counter() - start_time) * 1000
+        t0 = time.perf_counter()
+        shared, kyber_ct = self._kyber.encaps(self.pk_kyber)
+        t1 = time.perf_counter()
 
-        # AES-CTR encryption (replacing AES-GCM)
-        start_time = time.perf_counter()
-        aes_key = shared_key[:32]
-        nonce = os.urandom(16)  # Nonce for AES-CTR (same length as IV)
-        cipher = Cipher(algorithms.AES(aes_key), modes.CTR(nonce), backend=default_backend())
-        encryptor = cipher.encryptor()
-        ct = encryptor.update(data.encode()) + encryptor.finalize()
-        aes_time = (time.perf_counter() - start_time) * 1000
+        aes_key = shared[:32]
+        nonce   = os.urandom(16)
+        cipher  = Cipher(algorithms.AES(aes_key), modes.CTR(nonce), backend=default_backend())
+        ct       = cipher.encryptor().update(data.encode()) + cipher.encryptor().finalize()
+        t2       = time.perf_counter()
 
-        # Dilithium signing
-        start_time = time.perf_counter()
-        msg_to_sign = ct + kyber_ct  # No tag since we're using AES-CTR
-        sig = ML_DSA_44.sign(self.sk_dilithium, msg_to_sign)
-        dilithium_time = (time.perf_counter() - start_time) * 1000
+        sig      = self._dilithium.sign(self.sk_dilithium, ct + kyber_ct)
+        t3       = time.perf_counter()
 
-        total_time = kyber_time + aes_time + dilithium_time
-        print(f"PQC Kyber Encapsulation Time: {kyber_time:.2f} ms")
-        print(f"PQC AES-CTR Encryption Time: {aes_time:.2f} ms")
-        print(f"PQC Dilithium Signing Time: {dilithium_time:.2f} ms")
-        print(f"PQC Total Encryption Time: {total_time:.2f} ms, Data Size: {data_size} bytes")
-        timings = {'kyber': kyber_time, 'aes_ctr': aes_time, 'dilithium': dilithium_time}
+        timings = {
+            'kyber_ms':     (t1 - t0) * 1000,
+            'aes_ctr_ms':   (t2 - t1) * 1000,
+            'dilithium_ms': (t3 - t2) * 1000,
+        }
+        print(f"PQC Total Encryption Time: {sum(timings.values()):.2f} ms")
+
         return ct, None, nonce, kyber_ct, sig, self.sk_kyber, self.pk_dilithium, timings
 
-    def decrypt(self, ct: bytes, tag: bytes, nonce: bytes, kyber_ct: bytes, sig: bytes, sk_kyber: bytes, pk_dilithium: bytes) -> tuple:
-        start_time = time.perf_counter()
-        msg_to_verify = ct + kyber_ct  # No tag to include
-        if not ML_DSA_44.verify(pk_dilithium, msg_to_verify, sig):
+    def decrypt(self, ct, tag, nonce, kyber_ct, sig, sk, pk) -> tuple:
+        t0 = time.perf_counter()
+        if not self._dilithium.verify(pk, ct + kyber_ct, sig):
             return None, None
-        dilithium_time = (time.perf_counter() - start_time) * 1000
+        t1 = time.perf_counter()
 
-        start_time = time.perf_counter()
-        shared_key = ML_KEM_512.decaps(sk_kyber, kyber_ct)
-        kyber_time = (time.perf_counter() - start_time) * 1000
+        shared = self._kyber.decaps(sk, kyber_ct)
+        t2     = time.perf_counter()
 
-        start_time = time.perf_counter()
-        aes_key = shared_key[:32]
-        cipher = Cipher(algorithms.AES(aes_key), modes.CTR(nonce), backend=default_backend())
-        decryptor = cipher.decryptor()
-        try:
-            pt_bytes = decryptor.update(ct) + decryptor.finalize()
-            aes_time = (time.perf_counter() - start_time) * 1000
-            total_time = dilithium_time + kyber_time + aes_time
-            print(f"PQC Dilithium Verification Time: {dilithium_time:.2f} ms")
-            print(f"PQC Kyber Decapsulation Time: {kyber_time:.2f} ms")
-            print(f"PQC AES-CTR Decryption Time: {aes_time:.2f} ms")
-            print(f"PQC Total Decryption Time: {total_time:.2f} ms")
-            timings = {'kyber': kyber_time, 'aes_ctr': aes_time, 'dilithium': dilithium_time}
-            return pt_bytes.decode(), timings
-        except:
-            return None, None
+        cipher   = Cipher(algorithms.AES(shared[:32]), modes.CTR(nonce), backend=default_backend())
+        pt_bytes = cipher.decryptor().update(ct) + cipher.decryptor().finalize()
+        t3       = time.perf_counter()
+
+        timings = {
+            'dilithium_ms': (t1 - t0) * 1000,
+            'kyber_ms':     (t2 - t1) * 1000,
+            'aes_ctr_ms':   (t3 - t2) * 1000,
+        }
+        print(f"PQC Total Decryption Time: {sum(timings.values()):.2f} ms")
+
+        return pt_bytes.decode(), timings
