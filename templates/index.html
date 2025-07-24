@@ -101,9 +101,15 @@
             <tr><td>CPU Usage</td><td>{{ benchmark_data.traditional.cpu_usage }}</td></tr>
             <tr><td>Memory Usage</td><td>{{ benchmark_data.traditional.memory_diff }}</td></tr>
             {% if crypto_timings.traditional %}
+            {% if crypto_timings.traditional.rsa_kem_ms is defined %}
             <tr><td>RSA‑OAEP Time</td><td>{{ "%.2f ms"|format(crypto_timings.traditional.rsa_kem_ms) }}</td></tr>
             <tr><td>AES‑CTR Time</td><td>{{ "%.2f ms"|format(crypto_timings.traditional.aes_ctr_ms) }}</td></tr>
             <tr><td>RSA‑PSS Time</td><td>{{ "%.2f ms"|format(crypto_timings.traditional.rsa_pss_ms) }}</td></tr>
+            {% else %}
+            <tr><td>RSA‑PSS Verify Time</td><td>{{ "%.2f ms"|format(crypto_timings.traditional.rsa_pss_ver_ms) }}</td></tr>
+            <tr><td>RSA‑OAEP Decap Time</td><td>{{ "%.2f ms"|format(crypto_timings.traditional.rsa_kem_dec_ms) }}</td></tr>
+            <tr><td>AES‑CTR Decrypt Time</td><td>{{ "%.2f ms"|format(crypto_timings.traditional.aes_ctr_dec_ms) }}</td></tr>
+            {% endif %}
             {% endif %}
         </table>
         {% elif benchmark_data.pqc %}
@@ -113,9 +119,9 @@
             <tr><td>CPU Usage</td><td>{{ benchmark_data.pqc.cpu_usage }}</td></tr>
             <tr><td>Memory Usage</td><td>{{ benchmark_data.pqc.memory_diff }}</td></tr>
             {% if crypto_timings.pqc %}
-            <tr><td>Kyber Time</td><td>{{ "%.2f ms"|format(crypto_timings.pqc.kyber_ms) }}</td></tr>
-            <tr><td>AES‑CTR Time</td><td>{{ "%.2f ms"|format(crypto_timings.pqc.aes_ctr_ms) }}</td></tr>
-            <tr><td>Dilithium Time</td><td>{{ "%.2f ms"|format(crypto_timings.pqc.dilithium_ms) }}</td></tr>
+            <tr><td>Dilithium Verify</td><td>{{ "%.2f ms"|format(crypto_timings.pqc.dilithium_ms) }}</td></tr>
+            <tr><td>Kyber Decap</td><td>{{ "%.2f ms"|format(crypto_timings.pqc.kyber_ms) }}</td></tr>
+            <tr><td>AES‑CTR Decrypt</td><td>{{ "%.2f ms"|format(crypto_timings.pqc.aes_ctr_ms) }}</td></tr>
             {% endif %}
         </table>
         {% endif %}

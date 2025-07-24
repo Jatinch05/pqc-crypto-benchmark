@@ -16,18 +16,30 @@ class Database:
         )
         self.cursor = self.conn.cursor()
 
-    def insert_patient(self, method, encrypted_data, tag, iv, kyber_ct=None, sig=None):
+    def insert_patient(self, method, ct, tag, iv, kyber_ct=None, sig=None):
+        """
+        Inserts an encrypted patient record into the database.
+        For traditional: ct, tag=signature, iv, kyber_ct=RSA-KEM CT, sig=None
+        For PQC:         ct, tag=None,      iv, kyber_ct=Kyber CT,  sig=Dilithium sig
+        """
         query = """
-        INSERT INTO patient_data
-          (method, encrypted_data, tag, iv, kyber_ct, sig)
+        INSERT INTO patient_data 
+            (method, encrypted_data, tag, iv, kyber_ct, sig)
         VALUES (%s, %s, %s, %s, %s, %s)
         """
-        self.cursor.execute(query, (method, encrypted_data, tag, iv, kyber_ct, sig))
+        self.cursor.execute(query, (method, ct, tag, iv, kyber_ct, sig))
         self.conn.commit()
         return self.cursor.lastrowid
 
     def get_patient(self, id):
-        query = "SELECT method, encrypted_data, tag, iv, kyber_ct, sig FROM patient_data WHERE id = %s"
+        """
+        Returns: method, encrypted_data, tag, iv, kyber_ct, sig
+        """
+        query = """
+        SELECT method, encrypted_data, tag, iv, kyber_ct, sig 
+        FROM patient_data 
+        WHERE id = %s
+        """
         self.cursor.execute(query, (id,))
         return self.cursor.fetchone()
 

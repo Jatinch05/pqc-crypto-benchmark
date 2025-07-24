@@ -47,10 +47,11 @@ def index():
             if not rec:
                 result = "Patient not found"
             else:
-                _, _, ct, tag, iv, kem_ct, sig = rec
+                method, ct, tag, iv, kem_ct, sig = rec
                 b = Benchmark(); b.start()
                 if request.form['decrypt_method'] == 'traditional':
-                    pt, dt = trad.decrypt(ct, tag, iv, kem_ct)
+                    key = bytes.fromhex(request.form['traditional_key'])
+                    pt, dt = trad.decrypt(ct, tag, iv, kem_ct, key)
                     benchmark_data['traditional'] = b.stop()
                     crypto_timings['traditional'] = dt
                 else:
