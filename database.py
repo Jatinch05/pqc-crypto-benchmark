@@ -1,18 +1,19 @@
 import os
+import psycopg2
 from dotenv import load_dotenv
-import mysql.connector
 
-# Load .env for local dev
+# Load environment variables from .env
 load_dotenv()
 
 class Database:
     def __init__(self):
-        self.conn = mysql.connector.connect(
+        self.conn = psycopg2.connect(
             host     = os.getenv("DB_HOST", "localhost"),
-            user     = os.getenv("DB_USER", "root"),
+            user     = os.getenv("DB_USER", "postgres"),
             password = os.getenv("DB_PASSWORD", ""),
-            database = os.getenv("DB_NAME", "benchmark"),
-            port     = int(os.getenv("DB_PORT", 3306))
+            dbname   = os.getenv("DB_NAME", "benchmark"),
+            port     = int(os.getenv("DB_PORT", 5432)),
+            sslmode  = "require"  # Required for Neon
         )
         self.cursor = self.conn.cursor()
 
@@ -26,10 +27,11 @@ class Database:
         INSERT INTO patient_data 
             (method, encrypted_data, tag, iv, kyber_ct, sig)
         VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id
         """
         self.cursor.execute(query, (method, ct, tag, iv, kyber_ct, sig))
         self.conn.commit()
-        return self.cursor.lastrowid
+        return self.cursor.fetchone()[0]
 
     def get_patient(self, id):
         """
@@ -44,7 +46,7 @@ class Database:
         return self.cursor.fetchone()
 
     def reset_table(self):
-        self.cursor.execute("TRUNCATE TABLE patient_data")
+        self.cursor.execute("TRUNCATE TABLE patient_data RESTART IDENTITY")
         self.conn.commit()
 
     def close(self):
